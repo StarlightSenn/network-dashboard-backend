@@ -1,0 +1,6 @@
+{
+  "refreshSeconds": 1,
+  "latencyThreshold": 170,
+  "alertsEnabled": true,
+  "themeMode": "light"
+}
