@@ -1,4 +1,6 @@
-const { exec } = require('child_process');
+// services/monitoringService.js
+// Simple simulated metrics (no real ping/ICMP), safe for Render & local
+
 const historyRepo = require('../repos/historyRepo');
 
 let ioInstance = null;
@@ -11,9 +13,10 @@ function init(io) {
 
 function start() {
   stop();
-  // run every 3 seconds
-  timer = setInterval(async () => {
-    const metric = await measureMetric();
+
+  // generate a metric every 3 seconds
+  timer = setInterval(() => {
+    const metric = simulateMetric();
 
     const id = historyRepo.saveMetric(
       metric.deviceId,
@@ -24,67 +27,29 @@ function start() {
     );
 
     const payload = { ...metric, id };
-    if (ioInstance) ioInstance.emit('metric', payload);
+
+    if (ioInstance) {
+      ioInstance.emit('metric', payload);
+    }
+
     console.log('metric', payload);
   }, 3000);
 }
 
 function stop() {
-  if (timer) clearInterval(timer);
+  if (timer) {
+    clearInterval(timer);
+  }
   timer = null;
 }
 
-// ✅ NEW: real latency using ping, works on Windows + Linux
-function getRealLatency() {
-  return new Promise((resolve) => {
-    const isWin = process.platform === 'win32';
-    // Windows uses -n, Linux uses -c
-    const cmd = isWin ? 'ping -n 1 8.8.8.8' : 'ping -c 1 8.8.8.8';
-
-    exec(cmd, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Ping error:', error.message);
-        return resolve(null);
-      }
-
-      let match;
-
-      if (isWin) {
-        // Typical Windows output: Average = 27ms  OR  time=27ms / time<1ms
-        match =
-          stdout.match(/Average = (\d+)ms/i) ||
-          stdout.match(/time[=<]\s*(\d+)ms/i);
-      } else {
-        // Typical Linux output: time=27.3 ms
-        match = stdout.match(/time[=<]?\s*([\d.]+)\s*ms/i);
-      }
-
-      if (match && match[1]) {
-        const ms = parseFloat(match[1]);
-        if (!Number.isNaN(ms)) {
-          return resolve(ms);
-        }
-      }
-
-      // couldn't parse → just return null
-      resolve(null);
-    });
-  });
-}
-
-// build one metric using real latency + simulated bandwidth
-async function measureMetric() {
-  const latency_ms = await getRealLatency();
-
+// Simulated metric: random bandwidth + random latency
+function simulateMetric() {
   const in_bps = 5_000_000 + Math.random() * 2_000_000;  // 5–7 Mbps
   const out_bps = 2_000_000 + Math.random() * 1_000_000; // 2–3 Mbps
+  const latency_ms = 20 + Math.random() * 80;            // 20–100 ms
 
-  let status = 'ok';
-  if (latency_ms == null) {
-    status = 'no_ping';
-  } else if (latency_ms > 80) {
-    status = 'high_latency';
-  }
+  const status = latency_ms > 80 ? 'high_latency' : 'ok';
 
   return {
     timestamp: new Date().toISOString(),
